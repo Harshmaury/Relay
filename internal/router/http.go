@@ -5,6 +5,7 @@
 package router
 
 import (
+	canonid "github.com/Harshmaury/Canon/identity"
 	"bufio"
 	"bytes"
 	"encoding/json"
@@ -59,8 +60,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	r.Header.Set(config.SubdomainHeader, sub)
-	r.Header.Set(config.OwnerHeader, entry.Owner)
+	r.Header.Set(canonid.SubdomainHeader, sub)
+	r.Header.Set(canonid.OwnerHeader, entry.Owner)
 
 	proxy := &httputil.ReverseProxy{
 		Director: func(req *http.Request) {
@@ -110,7 +111,7 @@ func (h *Handler) checkMode() (bool, string) {
 		return false, ""
 	}
 	if h.serviceToken != "" {
-		req.Header.Set(config.ServiceTokenHeader, h.serviceToken)
+		req.Header.Set(canonid.ServiceTokenHeader, h.serviceToken)
 	}
 	resp, err := client.Do(req)
 	if err != nil {

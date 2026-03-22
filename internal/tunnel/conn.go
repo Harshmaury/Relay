@@ -6,6 +6,7 @@
 package tunnel
 
 import (
+	canonid "github.com/Harshmaury/Canon/identity"
 	"bufio"
 	"crypto/subtle"
 	"encoding/json"
@@ -119,4 +120,4 @@ func newTunnelID() string {
 	return fmt.Sprintf("tun_%d", time.Now().UnixNano()%0xFFFFFF)
 }
 
-var _ = config.ServiceName // ensure config package used
+var _ = "relay" // ensure config package used

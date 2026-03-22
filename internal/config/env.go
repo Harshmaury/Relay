@@ -4,7 +4,11 @@
 // ADR-041: all config is from env; no config files.
 package config
 
-import "os"
+import (
+	"os"
+
+	canonid "github.com/Harshmaury/Canon/identity"
+)
 
 // Config holds all Relay runtime configuration.
 type Config struct {
@@ -47,8 +51,8 @@ func Load() *Config {
 	return &Config{
 		TunnelAddr:      envOr("RELAY_TUNNEL_ADDR", DefaultTunnelListenAddr),
 		HTTPAddr:        envOr("RELAY_HTTP_ADDR", DefaultHTTPListenAddr),
-		NexusAddr:       envOr("NEXUS_ADDR", DefaultNexusAddr),
-		GateAddr:        envOr("GATE_ADDR", DefaultGateAddr),
+		NexusAddr:       envOr("NEXUS_ADDR", canonid.DefaultNexusAddr),
+		GateAddr:        envOr("GATE_ADDR", canonid.DefaultGateAddr),
 		ServiceToken:    os.Getenv("RELAY_SERVICE_TOKEN"),
 		RelayToken:      os.Getenv("RELAY_TOKEN"),
 		PlatformDomain:  envOr("RELAY_DOMAIN", "engx.dev"),
