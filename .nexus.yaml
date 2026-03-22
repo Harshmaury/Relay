@@ -1,0 +1,10 @@
+id: relay
+name: Relay
+role: control
+version: v0.1.0
+description: Public endpoint tunneling service — engx expose (ADR-041)
+runtime:
+  binary: relay
+  ports:
+    - 9090
+    - 9091
