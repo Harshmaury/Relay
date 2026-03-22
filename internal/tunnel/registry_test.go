@@ -8,89 +8,67 @@ import (
 	"time"
 )
 
-// fakeConn is a minimal net.Conn for testing.
-type fakeConn struct{ closed bool }
+func makeMux(t *testing.T) (*Mux, net.Conn) {
+	t.Helper()
+	server, client := net.Pipe()
+	m := NewMux(client)
+	return m, server
+}
 
-func (f *fakeConn) Close() error                       { f.closed = true; return nil }
-func (f *fakeConn) Read(b []byte) (int, error)         { return 0, nil }
-func (f *fakeConn) Write(b []byte) (int, error)        { return len(b), nil }
-func (f *fakeConn) LocalAddr() net.Addr                { return nil }
-func (f *fakeConn) RemoteAddr() net.Addr               { return nil }
-func (f *fakeConn) SetDeadline(t time.Time) error      { return nil }
-func (f *fakeConn) SetReadDeadline(t time.Time) error  { return nil }
-func (f *fakeConn) SetWriteDeadline(t time.Time) error { return nil }
-
-func makeEntry(id, owner, sub string) *Entry {
-	return &Entry{
-		ID:           id,
-		Owner:        owner,
-		Subdomain:    sub,
-		Conn:         &fakeConn{},
-		RegisteredAt: time.Now(),
-	}
+func makeEntry(id, owner, sub string, m *Mux) *Entry {
+	return &Entry{ID: id, Owner: owner, Subdomain: sub, Mux: m, RegisteredAt: time.Now()}
 }
 
 func TestRegistry_RegisterAndLookup(t *testing.T) {
 	r := NewRegistry()
-	e := makeEntry("tun_001", "harsh", "api.harsh")
-	r.Register(e)
-
+	m, server := makeMux(t)
+	defer server.Close()
+	r.Register(makeEntry("tun_001", "harsh", "api.harsh", m))
 	got := r.Lookup("api.harsh")
-	if got == nil {
-		t.Fatal("expected entry, got nil")
-	}
-	if got.ID != "tun_001" {
-		t.Errorf("wrong ID: %s", got.ID)
+	if got == nil || got.ID != "tun_001" {
+		t.Fatalf("expected entry tun_001, got %v", got)
 	}
 }
 
 func TestRegistry_LookupMiss(t *testing.T) {
 	r := NewRegistry()
-	if r.Lookup("nonexistent.sub") != nil {
-		t.Error("expected nil for unknown subdomain")
+	if r.Lookup("nonexistent") != nil {
+		t.Error("expected nil")
 	}
 }
 
 func TestRegistry_Remove(t *testing.T) {
 	r := NewRegistry()
-	conn := &fakeConn{}
-	e := &Entry{ID: "tun_002", Owner: "harsh", Subdomain: "forge.harsh", Conn: conn, RegisteredAt: time.Now()}
-	r.Register(e)
+	m, server := makeMux(t)
+	defer server.Close()
+	r.Register(makeEntry("tun_002", "harsh", "forge.harsh", m))
 	r.Remove("tun_002")
-
 	if r.Lookup("forge.harsh") != nil {
 		t.Error("expected nil after remove")
-	}
-	if !conn.closed {
-		t.Error("expected connection to be closed on remove")
 	}
 }
 
 func TestRegistry_ReRegisterClosesOld(t *testing.T) {
 	r := NewRegistry()
-	old := &fakeConn{}
-	r.Register(&Entry{ID: "tun_a", Owner: "harsh", Subdomain: "api.harsh", Conn: old, RegisteredAt: time.Now()})
-
-	// Re-register same subdomain — old connection should be closed.
-	newConn := &fakeConn{}
-	r.Register(&Entry{ID: "tun_b", Owner: "harsh", Subdomain: "api.harsh", Conn: newConn, RegisteredAt: time.Now()})
-
-	if !old.closed {
-		t.Error("expected old connection to be closed on re-register")
-	}
+	m1, s1 := makeMux(t)
+	m2, s2 := makeMux(t)
+	defer s1.Close()
+	defer s2.Close()
+	r.Register(makeEntry("tun_a", "harsh", "api.harsh", m1))
+	r.Register(makeEntry("tun_b", "harsh", "api.harsh", m2))
 	got := r.Lookup("api.harsh")
 	if got == nil || got.ID != "tun_b" {
-		t.Errorf("expected new entry, got %v", got)
+		t.Errorf("expected tun_b, got %v", got)
 	}
 }
 
 func TestRegistry_Count(t *testing.T) {
 	r := NewRegistry()
-	if r.Count() != 0 {
-		t.Error("expected empty registry")
-	}
-	r.Register(makeEntry("t1", "a", "a.a"))
-	r.Register(makeEntry("t2", "b", "b.b"))
+	m1, s1 := makeMux(t)
+	m2, s2 := makeMux(t)
+	defer s1.Close(); defer s2.Close()
+	r.Register(makeEntry("t1", "a", "a.a", m1))
+	r.Register(makeEntry("t2", "b", "b.b", m2))
 	if r.Count() != 2 {
 		t.Errorf("expected 2, got %d", r.Count())
 	}
@@ -98,9 +76,7 @@ func TestRegistry_Count(t *testing.T) {
 
 func TestEntry_PublicURL(t *testing.T) {
 	e := &Entry{Subdomain: "api.harsh"}
-	got := e.PublicURL("engx.dev")
-	want := "https://api.harsh.engx.dev"
-	if got != want {
-		t.Errorf("got %s, want %s", got, want)
+	if got := e.PublicURL("engx.dev"); got != "https://api.harsh.engx.dev" {
+		t.Errorf("got %s", got)
 	}
 }

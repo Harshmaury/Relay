@@ -1,22 +1,22 @@
 // @relay-project: relay
 // @relay-path: internal/tunnel/registry.go
 // Registry is the in-memory store of active tunnel connections.
-// Thread-safe via sync.RWMutex. ADR-041: Relay owns tunnel registry.
+// Each entry now holds a *Mux instead of a raw net.Conn,
+// enabling safe concurrent HTTP request forwarding (Fix 1 — audit).
 package tunnel
 
 import (
 	"fmt"
-	"net"
 	"sync"
 	"time"
 )
 
 // Entry is one active tunnel in the registry.
 type Entry struct {
-	ID          string    // UUID
-	Owner       string    // Gate subject or OS username (X-Engx-Owner)
-	Subdomain   string    // full subdomain prefix, e.g. "api.harsh"
-	Conn        net.Conn  // underlying TLS connection from engxa
+	ID           string
+	Owner        string // Gate subject or OS username
+	Subdomain    string // full subdomain prefix, e.g. "api.harsh"
+	Mux          *Mux  // request multiplexer — replaces raw net.Conn
 	RegisteredAt time.Time
 }
 
@@ -27,9 +27,9 @@ func (e *Entry) PublicURL(domain string) string {
 
 // Registry is a thread-safe in-memory map of active tunnels.
 type Registry struct {
-	mu      sync.RWMutex
-	byID    map[string]*Entry // tunnelID → entry
-	bySub   map[string]*Entry // subdomain → entry (for routing)
+	mu    sync.RWMutex
+	byID  map[string]*Entry
+	bySub map[string]*Entry
 }
 
 // NewRegistry creates an empty Registry.
@@ -44,9 +44,8 @@ func NewRegistry() *Registry {
 func (r *Registry) Register(e *Entry) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	// Close any existing connection for this subdomain (tunnel reconnect).
 	if old, ok := r.bySub[e.Subdomain]; ok {
-		old.Conn.Close()
+		old.Mux.Close()
 		delete(r.byID, old.ID)
 	}
 	r.byID[e.ID] = e
@@ -60,7 +59,7 @@ func (r *Registry) Lookup(subdomain string) *Entry {
 	return r.bySub[subdomain]
 }
 
-// Remove removes a tunnel entry by ID and closes its connection.
+// Remove removes a tunnel entry by ID and closes its Mux.
 func (r *Registry) Remove(id string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -68,7 +67,7 @@ func (r *Registry) Remove(id string) {
 	if !ok {
 		return
 	}
-	e.Conn.Close()
+	e.Mux.Close()
 	delete(r.byID, e.ID)
 	delete(r.bySub, e.Subdomain)
 }
