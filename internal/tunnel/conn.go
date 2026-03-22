@@ -13,7 +13,6 @@ import (
 	"net"
 	"time"
 
-	"github.com/Harshmaury/Relay/internal/config"
 )
 
 // HandshakeRequest is the JSON message engxa sends on connection.

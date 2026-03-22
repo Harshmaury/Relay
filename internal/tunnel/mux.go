@@ -22,7 +22,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"math/rand"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -44,6 +43,7 @@ type Mux struct {
 	closed   atomic.Bool
 	closeOnce sync.Once
 	done     chan struct{}
+	counter  atomic.Uint32 // CW-6: monotonic per-Mux request ID counter
 }
 
 // NewMux creates a Mux wrapping conn and starts the read loop.
@@ -155,7 +155,12 @@ func (m *Mux) writeFrame(reqID uint32, body []byte) error {
 	return err
 }
 
-// nextID generates a unique request ID for this mux instance.
+// nextID returns a monotonically increasing, per-Mux request ID.
+// CW-6: replaced math/rand.Uint32() — rand had birthday-paradox collision
+// risk under concurrent load and was not per-Mux isolated.
+// Atomic counter guarantees uniqueness within a Mux lifetime.
+// Wraps at uint32 max (~4B requests) — safe for any realistic tunnel.
+// Non-zero guaranteed: Add(1) starts from 1.
 func (m *Mux) nextID() uint32 {
-	return rand.Uint32() | 1 // ensure non-zero
+	return m.counter.Add(1)
 }

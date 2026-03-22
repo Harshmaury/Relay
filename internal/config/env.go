@@ -47,6 +47,14 @@ type Config struct {
 }
 
 // Load reads all configuration from environment with defaults applied.
+// DefaultTunnelListenAddr is the local address Relay listens on for tunnel connections.
+// Override with RELAY_TUNNEL_ADDR environment variable.
+const DefaultTunnelListenAddr = "0.0.0.0:9090"
+
+// DefaultHTTPListenAddr is the local address Relay listens on for inbound HTTP traffic.
+// Override with RELAY_HTTP_ADDR environment variable.
+const DefaultHTTPListenAddr = "0.0.0.0:8090"
+
 func Load() *Config {
 	return &Config{
 		TunnelAddr:      envOr("RELAY_TUNNEL_ADDR", DefaultTunnelListenAddr),
