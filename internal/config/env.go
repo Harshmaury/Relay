@@ -32,9 +32,12 @@ type Config struct {
 	// Environment: RELAY_SERVICE_TOKEN. Required in production.
 	ServiceToken string
 
-	// RelayToken is the shared secret engxa presents when opening a tunnel.
-	// Environment: RELAY_TOKEN. Required.
+	// RelayToken is the LEGACY pre-shared secret (dev-mode fallback).
+	// Deprecated: use Gate JWT tunnel tokens in production (CW-2).
+	// If RELAY_GATE_ADDR is set, RelayToken is ignored.
+	// Environment: RELAY_TOKEN.
 	RelayToken string
+
 
 	// PlatformDomain is the base domain for public tunnel URLs.
 	// Environment: RELAY_DOMAIN. Default: engx.dev
