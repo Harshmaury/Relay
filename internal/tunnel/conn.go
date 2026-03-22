@@ -6,7 +6,6 @@
 package tunnel
 
 import (
-	canonid "github.com/Harshmaury/Canon/identity"
 	"bufio"
 	"crypto/subtle"
 	"encoding/json"

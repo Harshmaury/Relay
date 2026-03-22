@@ -6,6 +6,7 @@
 package auth
 
 import (
+	canonid "github.com/Harshmaury/Canon/identity"
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
@@ -75,7 +76,7 @@ func (v *GateValidator) Validate(identityToken string) (*IdentityClaim, error) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if v.serviceToken != "" {
-		req.Header.Set("X-Service-Token", v.serviceToken)
+		req.Header.Set(canonid.ServiceTokenHeader, v.serviceToken)
 	}
 
 	resp, err := v.client.Do(req)
