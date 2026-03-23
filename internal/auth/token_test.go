@@ -27,8 +27,8 @@ func TestValidateRelayToken(t *testing.T) {
 	}
 }
 
-func TestIdentityClaim_HasScope(t *testing.T) {
-	c := &IdentityClaim{Scopes: []string{"execute", "observe"}}
+func TestIdentityClaimDTO_HasScope(t *testing.T) {
+	c := &IdentityClaimDTO{Scopes: []string{"execute", "observe"}}
 	if !c.HasScope("execute") {
 		t.Error("expected execute scope")
 	}

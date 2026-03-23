@@ -3,6 +3,9 @@
 // Package auth handles tunnel authentication and identity verification.
 // ADR-041: relay token validates tunnel ownership (constant-time compare).
 // ADR-042: identity token validated against Gate for inbound requests.
+//
+// IdentityClaimDTO field names and json tags mirror accord.IdentityClaimDTO exactly.
+// When Accord is added to relay/go.mod, replace this local type with a direct import.
 package auth
 
 import (
@@ -17,7 +20,7 @@ import (
 
 // ValidateRelayToken checks the relay token using constant-time comparison.
 // Returns true if the presented token matches the expected token.
-// Always returns false if expected is empty.
+// Always returns false if expected is empty — never trust an unconfigured gate.
 func ValidateRelayToken(presented, expected string) bool {
 	if expected == "" {
 		return false
@@ -25,9 +28,10 @@ func ValidateRelayToken(presented, expected string) bool {
 	return subtle.ConstantTimeCompare([]byte(presented), []byte(expected)) == 1
 }
 
-// IdentityClaim is the Gate-validated actor identity.
-// Mirrors accord.IdentityClaimDTO — inlined to avoid premature Accord dependency.
-type IdentityClaim struct {
+// IdentityClaimDTO is the Gate-validated actor identity for a tunnel connection.
+// Field names and json tags are identical to accord.IdentityClaimDTO (Accord v0.1.2).
+// When Accord is added to go.mod, replace this type with: accord.IdentityClaimDTO.
+type IdentityClaimDTO struct {
 	Subject   string   `json:"sub"`
 	Scopes    []string `json:"scp"`
 	ExpiresAt int64    `json:"exp"`
@@ -35,7 +39,7 @@ type IdentityClaim struct {
 }
 
 // HasScope returns true if the claim contains the requested scope.
-func (c *IdentityClaim) HasScope(scope string) bool {
+func (c *IdentityClaimDTO) HasScope(scope string) bool {
 	for _, s := range c.Scopes {
 		if s == scope {
 			return true
@@ -63,7 +67,7 @@ func NewGateValidator(gateAddr, serviceToken string) *GateValidator {
 // Validate calls POST /gate/validate to check the token's signature,
 // expiry, and revocation status.
 // Returns (nil, nil) if token is absent — callers decide if anonymous is allowed.
-func (v *GateValidator) Validate(identityToken string) (*IdentityClaim, error) {
+func (v *GateValidator) Validate(identityToken string) (*IdentityClaimDTO, error) {
 	if identityToken == "" {
 		return nil, nil // anonymous — not an error
 	}
@@ -86,9 +90,9 @@ func (v *GateValidator) Validate(identityToken string) (*IdentityClaim, error) {
 	defer resp.Body.Close()
 
 	var result struct {
-		Valid  bool           `json:"valid"`
-		Claim  *IdentityClaim `json:"claim,omitempty"`
-		Reason string         `json:"reason,omitempty"`
+		Valid  bool              `json:"valid"`
+		Claim  *IdentityClaimDTO `json:"claim,omitempty"`
+		Reason string            `json:"reason,omitempty"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("gate validate: decode: %w", err)
