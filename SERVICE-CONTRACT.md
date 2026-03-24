@@ -1,61 +1,74 @@
+// @relay-project: relay
+// @relay-path: SERVICE-CONTRACT.md
 # SERVICE-CONTRACT.md — Relay
+# @version: 0.1.0
+# @updated: 2026-03-25
 
-**Role:** control  
-**Version:** v0.1.0  
-**ADR:** ADR-041  
-**Ports:** 9090 (tunnel listener), 9091 (HTTP router)  
-**Module:** `github.com/Harshmaury/Relay`
+**Ports:** 9090 (tunnel listener) · 9091 (HTTP router) · **Domain:** Control
 
 ---
 
-## Tunnel protocol (port 9090)
+## Code
 
-engxa connects with a JSON handshake line:
+```
+cmd/relay/main.go              startup, goroutine lifecycle
+internal/tunnel/registry.go    in-memory tunnel registry (sync.RWMutex)
+internal/tunnel/conn.go        TLS tunnel lifecycle, validateToken()
+internal/tunnel/mux.go         TCP multiplexer — monotonic counter for request IDs
+internal/router/subdomain.go   Host header → tunnel lookup
+internal/router/http.go        HTTP reverse proxy through tunnel
+internal/auth/token.go         constant-time token comparison
+```
 
+---
+
+## Contract
+
+### Tunnel handshake (port 9090)
+
+engxa → Relay (JSON line):
 ```json
 {"token":"<relay-token>","owner":"harsh","name":"api"}
 ```
 
-Relay responds:
-
+Relay → engxa:
 ```json
 {"ok":true,"tunnel_id":"tun_abc123","subdomain":"api.harsh","public_url":"https://api.harsh.engx.dev"}
 ```
-
-On error:
-
+or
 ```json
 {"ok":false,"error":"invalid relay token"}
 ```
 
-Connection stays open. Relay writes forwarded HTTP requests; engxa reads and
-proxies to the local service. Response travels back over the same connection.
-
-## HTTP router (port 9091)
-
-All inbound requests to `*.engx.dev` land here via Cloudflare.
-
-Relay extracts the subdomain from the `Host` header, looks up the tunnel
-in the registry, and forwards the request byte-for-byte over the tunnel connection.
-
-Headers added by Relay on every forwarded request:
+### Headers added to every forwarded request
 
 | Header | Value |
 |--------|-------|
-| `X-Engx-Subdomain` | full subdomain prefix, e.g. `api.harsh` |
-| `X-Engx-Owner` | tunnel owner, e.g. `harsh` |
+| `X-Engx-Subdomain` | `Canon/identity.SubdomainHeader` — e.g. `api.harsh` |
+| `X-Engx-Owner` | `Canon/identity.OwnerHeader` — e.g. `harsh` |
 
-Headers are Canon constants — never hardcoded.
+### Token validation modes
 
-## ADR-044 mode probe
+| Mode | Condition | Behavior |
+|------|-----------|----------|
+| Gate JWT | `RELAY_GATE_ADDR` set | `POST /gate/validate` — owner from `sub` claim |
+| Legacy HMAC | `RELAY_GATE_ADDR` unset | compare against `RELAY_TOKEN` |
 
-When `RELAY_REQUIRE_IDENTITY=true`, Relay calls `GET /system/mode` on Nexus
-before forwarding any request. If `mode == "insecure"`, returns `503`.
+---
 
-## Invariants
+## Control
 
+**Reconnect:** engxa reconnecting for same subdomain closes the previous connection immediately.
+
+**Request ID:** `nextID()` uses `atomic.Uint32.Add(1)` — monotonically increasing, zero collision risk under concurrent load (CW-6 fix).
+
+**Mode probe:** if `RELAY_REQUIRE_IDENTITY=true`, calls `GET /system/mode` on Nexus before forwarding. Returns `503` if `mode == "insecure"`.
+
+---
+
+## Context
+
+- Never modifies request/response bodies, methods, or status codes
+- Never calls write endpoints on any platform service (ADR-020)
 - `RELAY_TOKEN` empty → all tunnel connections denied (no silent acceptance)
-- Relay never modifies request/response bodies, methods, or status codes
-- Relay never calls write endpoints on Nexus, Forge, Atlas, or any observer (ADR-020)
-- Token comparison always uses `crypto/subtle.ConstantTimeCompare` (no timing attacks)
-- Reconnecting engxa for the same subdomain closes the previous connection
+- Token comparison: `crypto/subtle.ConstantTimeCompare` always
