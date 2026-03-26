@@ -1,10 +1,20 @@
+name: relay
 id: relay
-name: Relay
-role: control
-version: v0.1.0
-description: Public endpoint tunneling service — engx expose (ADR-041)
+type: web-api
+language: go
+version: 0.1.0
+keywords:
+  - relay
+  - tunnel
+  - expose
+capabilities:
+  - tunnel-listener
+  - http-router
+  - public-endpoint
+depends_on:
+  - gate
 runtime:
-  binary: relay
-  ports:
-    - 9090
-    - 9091
+  provider: process
+  port: 9090
+  command: /home/harsh/bin/relay
+  dir: /home/harsh/workspace/projects/engx/services/relay
